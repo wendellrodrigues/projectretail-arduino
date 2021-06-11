@@ -1,68 +1,70 @@
-#include <Arduino.h>
-#include <ArduinoJson.h> //Make sure to install this library
-#include <SPI.h>
-#include <Ethernet.h>
+// Load Wi-Fi library
+#include <ESP8266WiFi.h>
+#include <ArduinoJson.h>
 
-// Enter a MAC address and IP address for your controller below.
-// The IP address will be dependent on your local network:
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress ip( 192,168,1,10 );
-IPAddress gateway( 192,168,1,1 );
-IPAddress subnet( 255,255,255,0 );
-IPAddress dns( 192,168,1,1 );
+// Replace with your network credentials
+const char* ssid     = "***********"; //Change this to ssid
+const char* password = "***********"; //Change this to password
 
-// Initialize the Ethernet server library
-// with the IP address and port you want to use
-// (port 80 is default for HTTP):
-EthernetServer server(80);
+// Set web server port number to 80
+WiFiServer server(80);
 
+//For Reading JSON
 StaticJsonDocument<256> doc;
 
-const byte BLUE = 6;
+// Variable to store the HTTP request
+String header;
+
+//LEDs
+const byte RED = 16;
 const byte GREEN = 5;
-const byte RED = 3;
+const byte BLUE = 4;
 
-void setup()
-{
- Serial.begin(9600);
+// Current time
+unsigned long currentTime = millis();
+// Previous time
+unsigned long previousTime = 0; 
+// Define timeout time in milliseconds (example: 2000ms = 2s)
+const long timeoutTime = 2000;
 
- pinMode(BLUE,OUTPUT);
- pinMode(GREEN,OUTPUT);
- pinMode(RED,OUTPUT);
+void setup() {
+  Serial.begin(115200);
+  // Initialize the output variables as outputs
 
+  pinMode(RED,OUTPUT);  //RED corresponds to bottom shelf
+  pinMode(GREEN,OUTPUT); //GREEN corresponds to middle shelf
+  pinMode(BLUE,OUTPUT);  //BLUE corresponds to top shelf
 
- // start the SD interface here if you want.
- // Add the SD.h library above
- // SD.begin(4);
-
- // start the Ethernet connection and the server:
- Ethernet.begin(mac, ip, dns, gateway, subnet);
- // disable w5100 SPI so SD SPI can work with it
- delay(2000);
- server.begin();
-
- Serial.println("setup finished");
-
- 
+  // Connect to Wi-Fi network with SSID and password
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  // Print local IP address and start web server
+  Serial.println("");
+  Serial.println("WiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  server.begin();
 }
 
-void loop()
-{
+void loop(){
+  WiFiClient client = server.available();   // Listen for incoming clients
 
-  
-  
- // listen for incoming clients
- EthernetClient client = server.available();
- if (client) {
-   Serial.println("Client");
-   // an http request ends with a blank line
+  if (client) {
+
+   //Initialize
    boolean currentLineIsBlank = true;
+
+   //Client requeuest (from API)
    while (client.connected()) {
      while(client.available()) {
        char c = client.read();
-       // if you've gotten to the end of the line (received a newline
-       // character) and the line is blank, the http request has ended,
-       // so you can send a reply
+
+       //Receive signal and light LED
        if (c == '\n' && currentLineIsBlank) {
         
          //GET Data coming in  
@@ -83,10 +85,8 @@ void loop()
           return;
          }
 
-         //The incoing jason will be the 
+         //The incoming jason will be the shelf # to light up. 
          int shelf = doc["shelf"];
-
-         Serial.println(shelf);
 
          if(shelf == 1) { 
             digitalWrite(BLUE, HIGH);
@@ -106,14 +106,15 @@ void loop()
             digitalWrite(RED, LOW);
           }
 
-         Serial.println("Sending response");
          
-         // send a standard http response header (200)
+         //send a standard http response header (200)
          client.println("HTTP/1.0 200 OK");
          client.println("Content-Type: application/json");
          client.println();
          client.stop();
        }
+
+       //Handle end of line
        else if (c == '\n') {
          // you're starting a new line
          currentLineIsBlank = true;
@@ -124,6 +125,5 @@ void loop()
        }
      }
    }
-   Serial.println("Disconnected");
  }
 }
